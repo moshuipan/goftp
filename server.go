@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net"
 	// "time"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,8 @@ const (
 	LS = "ls"
 )
 
+var Root string
+
 type Buffer []byte
 
 func (this *Buffer) Write(w []byte) {
@@ -23,6 +26,14 @@ func (this *Buffer) Write(w []byte) {
 	}
 }
 
+func init() {
+	var err error
+	Root, err = filepath.Abs(".")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}
 func main() {
 	listener, err := net.Listen("tcp", ":9091")
 	if err != nil {
@@ -43,7 +54,7 @@ func handleConn(conn net.Conn) {
 	defer conn.Close()
 	b := make([]byte, 512)
 	var out Buffer
-	currdir := filepath.Join(".")
+	currdir := "."
 	for {
 		conn.Write([]byte(currdir + "#"))
 		n, err := conn.Read(b)
@@ -58,6 +69,11 @@ func handleConn(conn net.Conn) {
 		switch ss[0] {
 		case LS:
 			out = ls(ss, currdir)
+		case CD:
+			err := cd(ss, &currdir)
+			if err != nil {
+				out.Write([]byte(err.Error()))
+			}
 		default:
 			out.Write([]byte("unknow commond!\n"))
 		}
@@ -65,7 +81,19 @@ func handleConn(conn net.Conn) {
 		out = nil
 	}
 }
-
+func cd(args []string, currdir *string) error {
+	//cd ..判断cd后的目录权限
+	path := filepath.Join(*currdir, args[1])
+	p, err := filepath.Abs(path)
+	if err != nil {
+		return errors.New(err.Error() + "\n")
+	}
+	if strings.Contains(p, Root) {
+		*currdir = path
+		return nil
+	}
+	return errors.New("路径权限不够!\n")
+}
 func ls(args []string, currdir string) (out Buffer) {
 	//three args
 	//ls [-l]  [dir]
@@ -75,23 +103,26 @@ func ls(args []string, currdir string) (out Buffer) {
 		if len(args) == 3 {
 			f, err = ioutil.ReadDir(args[2])
 			if err != nil {
-				out.Write([]byte("read dir error!"))
+				out.Write([]byte("read dir error!\n"))
 				return
 			}
 		} else if args[1] == "-l" {
 			f, err = ioutil.ReadDir(currdir)
 			if err != nil {
-				out.Write([]byte("read dir error!"))
+				out.Write([]byte("read dir error!\n"))
 				return
 			}
 		} else {
-			out.Write([]byte("unknow args!"))
-			return
+			f, err = ioutil.ReadDir(args[1])
+			if err != nil {
+				out.Write([]byte("read dir error!\n"))
+				return
+			}
 		}
 	} else {
 		f, err = ioutil.ReadDir(currdir)
 		if err != nil {
-			out.Write([]byte("read dir error!"))
+			out.Write([]byte("read dir error!\n"))
 			return
 		}
 	}
@@ -104,6 +135,7 @@ func ls(args []string, currdir string) (out Buffer) {
 			// out.Write([]byte(fmt.Sprint(v.Mode()) + "\t" + fmt.Sprint(v.Size()) + "\t" + v.Name() + "\n"))
 			out.Write([]byte(v.Name() + "\t"))
 		}
+		out.Write([]byte("\n"))
 	}
 	return
 }
