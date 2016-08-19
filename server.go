@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	// "time"
@@ -88,9 +89,21 @@ func handleConn(conn net.Conn) {
 	}
 }
 func cp(args []string) error {
-	//cp dst src
-	if len(args) < 3 {
-		return errors.New("cp dst src")
+	//cp dstdir+dstfilename src
+	if len(args) != 3 {
+		return errors.New("cp dstdir+dstfilename src\n")
+	}
+	src, err := os.Open(args[2])
+	if err != nil {
+		return errors.New(err.Error() + "\n")
+	}
+	dst, err := os.Create(args[1])
+	if err != nil {
+		return errors.New(err.Error() + "\n")
+	}
+	_, err = io.Copy(dst, src)
+	if err != nil {
+		return errors.New(err.Error() + "\n")
 	}
 	return nil
 }
