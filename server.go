@@ -16,6 +16,7 @@ const (
 	CD = "cd"
 	LS = "ls"
 	CP = "cp"
+	UL = "ul"
 )
 
 var Root string
@@ -65,7 +66,7 @@ func handleConn(conn net.Conn) {
 			break
 		}
 		body := b[0:n]
-		fmt.Println(body)
+		fmt.Printf("%s\n", body)
 		s := fmt.Sprintf("%s", body)
 		ss := strings.Fields(s)
 		switch ss[0] {
@@ -81,12 +82,36 @@ func handleConn(conn net.Conn) {
 			if err != nil {
 				out.Write([]byte(err.Error()))
 			}
+		case UL:
+			err := upload(ss, conn)
+			if err != nil {
+				out.Write([]byte(err.Error()))
+			}
 		default:
 			out.Write([]byte("unknow commond!\n"))
 		}
 		conn.Write(out)
 		out = nil
 	}
+}
+func upload(args []string, conn net.Conn) error {
+	//ul dst src
+	if len(args) != 3 {
+		return errors.New("ul dst src\n")
+	}
+	_, filename := filepath.Split(args[2])
+	name := filepath.Join(args[1], filename)
+	f, err := os.Create(name)
+	if err != nil {
+		return errors.New(err.Error() + "\n")
+	}
+	defer f.Close()
+	_, err = io.Copy(f, conn)
+	if err != nil {
+		return errors.New(err.Error() + "\n")
+	}
+	fmt.Println("\nc\n")
+	return nil
 }
 func cp(args []string) error {
 	//cp dstdir+dstfilename src

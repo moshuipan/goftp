@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -23,7 +24,24 @@ func main() {
 			if err != nil {
 				fmt.Println(err, ok)
 			}
-			_, err = conn.Write([]byte(s))
+			if args := strings.Fields(fmt.Sprintf("%s", s)); args[0] == "ul" {
+				if len(args) != 3 {
+					continue
+				}
+				f, err := os.Open(args[1])
+				if err != nil {
+					log.Fatal(err)
+					continue
+				}
+				conn.Write(s)
+				_, err = io.Copy(conn, f)
+				if err != nil {
+					log.Fatal(err)
+					continue
+				}
+				continue
+			}
+			_, err = conn.Write(s)
 			if err != nil {
 				fmt.Println(err)
 			}
