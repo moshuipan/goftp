@@ -14,6 +14,7 @@ import (
 const (
 	CD = "cd"
 	LS = "ls"
+	CP = "cp"
 )
 
 var Root string
@@ -65,12 +66,17 @@ func handleConn(conn net.Conn) {
 		body := b[0:n]
 		fmt.Println(body)
 		s := fmt.Sprintf("%s", body)
-		ss := strings.Split(s, " ")
+		ss := strings.Fields(s)
 		switch ss[0] {
 		case LS:
 			out = ls(ss, currdir)
 		case CD:
 			err := cd(ss, &currdir)
+			if err != nil {
+				out.Write([]byte(err.Error()))
+			}
+		case CP:
+			err := cp(ss)
 			if err != nil {
 				out.Write([]byte(err.Error()))
 			}
@@ -80,6 +86,13 @@ func handleConn(conn net.Conn) {
 		conn.Write(out)
 		out = nil
 	}
+}
+func cp(args []string) error {
+	//cp dst src
+	if len(args) < 3 {
+		return errors.New("cp dst src")
+	}
+	return nil
 }
 func cd(args []string, currdir *string) error {
 	//cd ..判断cd后的目录权限
