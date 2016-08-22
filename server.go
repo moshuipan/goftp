@@ -38,22 +38,26 @@ func init() {
 	}
 }
 func main() {
-	listener, err := net.Listen("tcp", ":9091")
+	listenaddr := &net.TCPAddr{
+		IP:   net.ParseIP("127.0.0.1"),
+		Port: 9091,
+	}
+	listener, err := net.ListenTCP("tcp", listenaddr)
 	if err != nil {
 		fmt.Println(err)
 	}
 
 	for {
-		conn, err := listener.Accept()
+		conn, err := listener.AcceptTCP()
 		if err != nil {
 			fmt.Println(err) // e.g., connection aborted
 			continue
 		}
-		go handleConn(conn) // handle one connection at a time
+		go handleConn(*conn) // handle one connection at a time
 	}
 }
 
-func handleConn(conn net.Conn) {
+func handleConn(conn net.TCPConn) {
 	defer conn.Close()
 	b := make([]byte, 512)
 	var out Buffer
@@ -94,7 +98,7 @@ func handleConn(conn net.Conn) {
 		out = nil
 	}
 }
-func upload(args []string, conn net.Conn) error {
+func upload(args []string, conn net.TCPConn) error {
 	//ul dst src
 	if len(args) != 3 {
 		return errors.New("ul dst src\n")
@@ -106,11 +110,29 @@ func upload(args []string, conn net.Conn) error {
 		return errors.New(err.Error() + "\n")
 	}
 	defer f.Close()
-	_, err = io.Copy(f, conn)
-	if err != nil {
-		return errors.New(err.Error() + "\n")
+	// conn.SetReadBuffer(1024 * 10000)
+	//end:0xda
+	buf := make([]byte, 1024)
+	for {
+		n, err := conn.Read(buf)
+		// _, err = io.Copy(f, conn)
+		if err != nil {
+			return errors.New(err.Error() + "\n")
+		}
+		b := buf[0:n]
+		if len(b) == 1 {
+			fmt.Println("upload end!")
+			break
+		} else {
+			if len(b) == 2 && b[1] == 0xda {
+				b = b[0:0]
+			}
+			_, err = f.Write(b)
+			if err != nil {
+				return errors.New(err.Error() + "\n")
+			}
+		}
 	}
-	fmt.Println("\nc\n")
 	return nil
 }
 func cp(args []string) error {

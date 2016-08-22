@@ -11,13 +11,18 @@ import (
 )
 
 func main() {
-	conn, err := net.Dial("tcp", "localhost:9091")
+	rmoteaddr := &net.TCPAddr{
+		IP:   net.ParseIP("127.0.0.1"),
+		Port: 9091,
+	}
+	conn, err := net.DialTCP("tcp", nil, rmoteaddr)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer conn.Close()
 	exit := make(chan bool)
 	go func() {
+	again:
 		for {
 			scan := bufio.NewReader(os.Stdin)
 			s, ok, err := scan.ReadLine()
@@ -28,17 +33,48 @@ func main() {
 				if len(args) != 3 {
 					continue
 				}
-				f, err := os.Open(args[1])
+				f, err := os.Open(args[2])
 				if err != nil {
-					log.Fatal(err)
+					fmt.Println(err)
 					continue
 				}
 				conn.Write(s)
-				_, err = io.Copy(conn, f)
-				if err != nil {
-					log.Fatal(err)
-					continue
+				buf := make([]byte, 1024)
+				var start int64 = 0
+				for {
+					n, err := f.ReadAt(buf, start)
+					if err != nil {
+						if err != io.EOF {
+							fmt.Println("read file error!", err)
+							f.Close()
+							continue again
+						}
+					}
+					start += int64(n)
+					b := buf[0:n]
+					if len(b) == 1 {
+						b = append(b, 0xda)
+					}
+					if len(b) == 0 {
+						fmt.Println("read all file!")
+						f.Close()
+						break
+					}
+					_, err = conn.Write(b)
+					if err != nil {
+						fmt.Println("send file error!", err)
+						f.Close()
+						continue again
+					}
 				}
+				_, err = conn.Write([]byte{0xda})
+				if err != nil {
+					fmt.Println("send file error!")
+					f.Close()
+					continue again
+				}
+				f.Close()
+				// conn.CloseWrite()
 				continue
 			}
 			_, err = conn.Write(s)
