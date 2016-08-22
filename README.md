@@ -1,4 +1,7 @@
-# goftp server
-#1.		ls [-l]  [dir]
-#2.		cd [dir]
-#3.		cp dstdir/filename src
+## goftp server
+###commond
+*ls [-l]  [dir]
+*cd [dir]
+*cp dstdir/filename src
+*ul dstdir src
+*dl dstdir src
