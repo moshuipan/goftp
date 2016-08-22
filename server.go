@@ -17,6 +17,7 @@ const (
 	LS = "ls"
 	CP = "cp"
 	UL = "ul"
+	DL = "dl"
 )
 
 var Root string
@@ -82,12 +83,17 @@ func handleConn(conn net.TCPConn) {
 				out.Write([]byte(err.Error()))
 			}
 		case CP:
-			err := cp(ss)
+			err := cp(ss, currdir)
 			if err != nil {
 				out.Write([]byte(err.Error()))
 			}
 		case UL:
-			err := upload(ss, conn)
+			err := upload(ss, conn, currdir)
+			if err != nil {
+				out.Write([]byte(err.Error()))
+			}
+		case DL:
+			err := download(ss, conn, currdir)
 			if err != nil {
 				out.Write([]byte(err.Error()))
 			}
@@ -98,10 +104,58 @@ func handleConn(conn net.TCPConn) {
 		out = nil
 	}
 }
-func upload(args []string, conn net.TCPConn) error {
+func download(args []string, conn net.TCPConn, currdir string) error {
+	//dl dst src
+	if len(args) != 3 {
+		return errors.New("ul dst src\n")
+	}
+	if err := checkurl(args[2], currdir); err != nil {
+		return err
+	}
+	f, err := os.Open(args[2])
+	if err != nil {
+		return errors.New(err.Error() + "\n")
+	}
+	defer f.Close()
+	buf := make([]byte, 1024)
+	var start int64 = 0
+	for {
+		n, err := f.ReadAt(buf, start)
+		if err != nil {
+			if err != io.EOF {
+				fmt.Println("read file error!", err)
+				return errors.New(err.Error() + "\n")
+			}
+		}
+		start += int64(n)
+		b := buf[0:n]
+		if len(b) == 1 {
+			b = append(b, 0xda)
+		}
+		if len(b) == 0 {
+			fmt.Println("read all file!")
+			break
+		}
+		_, err = conn.Write(b)
+		if err != nil {
+			fmt.Println("send file error!", err)
+			return errors.New(err.Error() + "\n")
+		}
+	}
+	_, err = conn.Write([]byte{0xda})
+	if err != nil {
+		fmt.Println("send file error!")
+		return errors.New(err.Error() + "\n")
+	}
+	return nil
+}
+func upload(args []string, conn net.TCPConn, currdir string) error {
 	//ul dst src
 	if len(args) != 3 {
 		return errors.New("ul dst src\n")
+	}
+	if err := checkurl(args[1], currdir); err != nil {
+		return err
 	}
 	_, filename := filepath.Split(args[2])
 	name := filepath.Join(args[1], filename)
@@ -120,7 +174,7 @@ func upload(args []string, conn net.TCPConn) error {
 			return errors.New(err.Error() + "\n")
 		}
 		b := buf[0:n]
-		if len(b) == 1 {
+		if len(b) == 1 && b[0] == 0xda {
 			fmt.Println("upload end!")
 			break
 		} else {
@@ -135,10 +189,17 @@ func upload(args []string, conn net.TCPConn) error {
 	}
 	return nil
 }
-func cp(args []string) error {
+func cp(args []string, currdir string) error {
 	//cp dstdir+dstfilename src
 	if len(args) != 3 {
 		return errors.New("cp dstdir+dstfilename src\n")
+	}
+	if err := checkurl(args[2], currdir); err != nil {
+		return err
+	}
+	dir, _ := filepath.Split(args[1])
+	if err := checkurl(dir, currdir); err != nil {
+		return err
 	}
 	src, err := os.Open(args[2])
 	if err != nil {
@@ -156,16 +217,12 @@ func cp(args []string) error {
 }
 func cd(args []string, currdir *string) error {
 	//cd ..判断cd后的目录权限
+	if err := checkurl(args[1], *currdir); err != nil {
+		return err
+	}
 	path := filepath.Join(*currdir, args[1])
-	p, err := filepath.Abs(path)
-	if err != nil {
-		return errors.New(err.Error() + "\n")
-	}
-	if strings.Contains(p, Root) {
-		*currdir = path
-		return nil
-	}
-	return errors.New("路径权限不够!\n")
+	*currdir = path
+	return nil
 }
 func ls(args []string, currdir string) (out Buffer) {
 	//three args
@@ -174,6 +231,10 @@ func ls(args []string, currdir string) (out Buffer) {
 	var err error
 	if len(args) > 1 {
 		if len(args) == 3 {
+			if err := checkurl(args[2], currdir); err != nil {
+				out.Write([]byte(err.Error()))
+				return
+			}
 			f, err = ioutil.ReadDir(args[2])
 			if err != nil {
 				out.Write([]byte("read dir error!\n"))
@@ -186,6 +247,10 @@ func ls(args []string, currdir string) (out Buffer) {
 				return
 			}
 		} else {
+			if err := checkurl(args[1], currdir); err != nil {
+				out.Write([]byte(err.Error()))
+				return
+			}
 			f, err = ioutil.ReadDir(args[1])
 			if err != nil {
 				out.Write([]byte("read dir error!\n"))
@@ -211,6 +276,17 @@ func ls(args []string, currdir string) (out Buffer) {
 		out.Write([]byte("\n"))
 	}
 	return
+}
+func checkurl(url string, currdir string) error {
+	path := filepath.Join(currdir, url)
+	p, err := filepath.Abs(path)
+	if err != nil {
+		return errors.New(err.Error() + "\n")
+	}
+	if strings.Contains(p, Root) {
+		return nil
+	}
+	return errors.New("路径权限不够!\n")
 }
 
 /*func handleConn(c net.Conn) {
