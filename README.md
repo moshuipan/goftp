@@ -1,4 +1,4 @@
-## goftp server(not ftp proc):smile:
+## goftp server:smile:
 ###commond
 * ls [-l]  [dir]
 * cd [dir]
